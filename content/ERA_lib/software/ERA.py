@@ -11,6 +11,17 @@ from plotly.subplots import make_subplots
 import plotly.express as px
 from .drawWCS import drawWCSGrid
 
+# --- Plotly Colorscale (sqrt scale) ---
+viridis = px.colors.sequential.Viridis
+colorscale = [
+    [0.0**2, viridis[0]],
+    [0.2**2, viridis[2]],
+    [0.4**2, viridis[4]],
+    [0.6**2, viridis[6]],
+    [0.8**2, viridis[8]],
+    [1.0**2, viridis[9]],
+]
+
 # -- Constants --
 c = 299792458.0
 
@@ -149,18 +160,6 @@ class DataFile:
         
         self.ra_coords, self.dec_coords = gen_radec(self.npix,self.OBSRA,self.OBSDEC)
 
-        # --- Plotly Colorscale (sqrt scale) ---
-        viridis = px.colors.sequential.Viridis
-        global colorscale
-        colorscale = [
-            [0.0**2, viridis[0]],
-            [0.2**2, viridis[2]],
-            [0.4**2, viridis[4]],
-            [0.6**2, viridis[6]],
-            [0.8**2, viridis[8]],
-            [1.0**2, viridis[9]],
-        ]
-
         if print_metadata:
             print("Num Antennas:\t\t",       self.Nant)
             print("Num Baselines:\t\t",      self.Nbls)
@@ -189,6 +188,7 @@ class DataFile:
         WEIGHT[ WEIGHT == 0 ] = 1 # avoid dividing by 0
         VISgrid = VISgrid / WEIGHT  # Is this natural weighting?? IDK, maybe its uniform. Which one is best? I cant remember
         return VISgrid
+
     
     def gen_image(self,select=None):
         if select is None:
@@ -246,6 +246,7 @@ class DataFile:
         )
         return fig
 
+    
     def fig_vis_v_baseline(self):
         fig = go.Figure(
             data = go.Scattergl(
@@ -277,6 +278,7 @@ class DataFile:
         )
         return fig
 
+    
     def fig_all_sky_image(self):
         # Generate Image
         img = self.gen_image()
@@ -315,9 +317,241 @@ class DataFile:
 
         return fig
 
+    
+    def fig_img_v_baseline(self):
+
+        # Generate data for each animation frame
+        Nframes = 16
+        data = np.zeros([self.npix,self.npix,Nframes])
+        uvmax = np.ceil(np.max(self.UVdist) * (c/self.freq_center) ) / (c/self.freq_center)
+        
+        for n in range(Nframes):
+            uv_cutoff = (n+1)/Nframes * uvmax
+            select = np.argwhere( self.UVdist <= uv_cutoff )[:,0]
+            data[:,:,n] = self.gen_image(select=select)
+        
+        # --- Define animation frames ---
+        frames = []
+        slider_steps = []
+        for n in range(Nframes):
+            uv_cutoff = (n+1)/Nframes * uvmax *(c/self.freq_center) # (metres)
+            
+            # --- define data for this frame ---
+            frames.append(
+                go.Heatmap(
+                    name = "",
+                    z = data[:,:,n],
+                    x = self.l_axis,
+                    y = self.m_axis,
+                    colorscale = colorscale,
+                    visible = False #All frames not visible by default (We will manually enable frame 0 later)
+                )
+            )
+            
+            # --- Define plot title and slider related stuff for this frame ---
+            slider_step = {
+              "method": "restyle", #"update",
+              "label": np.round(uv_cutoff,2),
+              "args": [
+                        {"visible": [False] * Nframes}
+                      ]
+            }
+            slider_step["args"][0]["visible"][n] = True
+            slider_steps.append(slider_step)
+        
+        # --- Create Figure ---
+        fig = go.Figure(
+            data=frames,
+            layout = {
+                "template": "simple_white",
+                "autosize": False,
+                "width": 700,
+                "height": 750,
+                "xaxis": {
+                    "title_text": "",
+                    "title_font": {"size": 20}
+                  },
+                "yaxis": {
+                    "title_text": "",
+                    "title_font": {"size": 20}
+                  },
+                "sliders": [{
+                    "active": 0,
+                    "currentvalue": {"prefix": "Max Baseline Length (m): "},
+                    "pad": {"t": 50},
+                    "steps": slider_steps
+                  }]
+            }
+        )
+        
+        # --- Manualy Draw WCS Grid ---
+        drawWCSGrid(fig, self.OBSRA, self.OBSDEC)
+        
+        fig.data[0].visible = True
+        
+        return fig
 
 
+    def fig_imgvis_v_baseline(self):
+        # Generate data for each animation frame
+        Nframes = 16
+        fig = make_subplots(rows=1, cols=2)
+        
+        uvmax  = np.ceil(np.max(self.UVdist) * (c/self.freq_center) ) / (c/self.freq_center)
+        vismax = np.max(np.abs(self.vis)) * 1.05
+        vismin = np.min(np.abs(self.vis)) / 1.05
+        
+        steps = []
+        for n in range(Nframes):
+            uv_cutoff = (n+1)/Nframes * uvmax
+            select = np.argwhere( self.UVdist <= uv_cutoff )[:,0]
+            
+            # --- Generate Data ---
+            uv_data  = self.UVdist[select] * (c/self.freq_center)
+            vis_data = np.abs(self.vis[select])
+            img_data = self.gen_image(select=select)
+            
+            # --- Add UVplot Trace ---
+            fig.add_trace(
+              go.Scattergl(
+                  name = "",
+                  x = uv_data,
+                  y = vis_data,
+                  mode = "markers",
+                  marker = dict(
+                      color = "black",
+                      showscale = False, # disable colorbar
+                      size = 4
+                  ),
+                  visible = False #All frames not visible by default (We will manually enable frame 0 later)
+              ),
+              row=1, col=1
+            )
+            
+            fig.add_trace(
+              go.Heatmap(
+                name = "",
+                z = img_data,
+                x = self.l_axis,
+                y = self.m_axis,
+                colorscale = colorscale,
+                visible = False #All frames not visible by default (We will manually enable frame 0 later)
+              ),
+              row=1, col=2
+            )
+            
+            # Define slide data
+            step = {
+              "method": 'restyle',
+              "args": ['visible', ['legendonly'] * (2*Nframes) ],
+              "label": np.round(uv_cutoff*(c/self.freq_center),2)
+            }
+            step['args'][1][2*n  ] = True
+            step['args'][1][2*n+1] = True
+            steps.append(step)
+        
+        fig.update_layout(width=1100, height=600,autosize=False)
+        fig.layout["template"] = "simple_white"
+        fig.layout["sliders"] = [{
+            "steps": steps,
+            "currentvalue": {"prefix": "Max Baseline Length (m): "}
+        }]
+        
+        for n in range(Nframes):
+            fig.layout["xaxis"+str(n*2+1)] = {
+              "range": [0,uvmax],
+              "domain": [0,0.5]
+            }
+            fig.layout["yaxis"+str(n*2+1)] = {
+              "range": [vismin,vismax],
+              "domain": [0,1]
+            }
+        
+        fig.data[0].visible = True
+        fig.data[1].visible = True
+        
+        return fig
 
 
+    def fig_img_v_uv(self):
+        # Generate data for each animation frame
+        Nframes = 12
+        fig = make_subplots(rows=1, cols=2)
+        
+        uvmax  = np.ceil(np.max(self.UVdist) * (c/self.freq_center) ) / (c/self.freq_center)
+        
+        steps = []
+        for n in range(Nframes):
+            uv_cutoff = (n+1)/Nframes * uvmax
+            select = np.argwhere( self.UVdist <= uv_cutoff )[:,0]
+            
+            # --- Generate Data ---
+            UVs = self.UVWs[select,0:2] * (c/self.freq_center)
+            UVs = np.tile( UVs , (2,1) )
+            UVs[int(UVs.shape[0]/2):,:] *= -1
+            
+            img_data = self.gen_image(select=select)
+            
+            # --- Add UVplot Trace ---
+            fig.add_trace(
+              go.Scattergl(
+                  name = "",
+                  x = UVs[:,0],
+                  y = UVs[:,1],
+                  mode = "markers",
+                  marker = dict(
+                      color = "black",
+                      showscale = False, # disable colorbar
+                      size = 4
+                  ),
+                  visible = False #All frames not visible by default (We will manually enable frame 0 later)
+              ),
+              row=1, col=1
+            )
+            
+            fig.add_trace(
+              go.Heatmap(
+                name = "",
+                z = img_data,
+                x = self.l_axis,
+                y = self.m_axis,
+                colorscale = colorscale,
+                visible = False #All frames not visible by default (We will manually enable frame 0 later)
+              ),
+              row=1, col=2
+            )
+            
+            # Define slide data
+            step = {
+              "method": 'restyle',
+              "args": ['visible', ['legendonly'] * (2*Nframes) ],
+              "label": np.round(uv_cutoff*(c/self.freq_center),2)
+            }
+            step['args'][1][2*n  ] = True
+            step['args'][1][2*n+1] = True
+            steps.append(step)
+        
+        fig.update_layout(width=1100, height=650,autosize=False)
+        fig.layout["template"] = "simple_white"
+        fig.layout["sliders"] = [{
+            "steps": steps,
+            "currentvalue": {"prefix": "Max Baseline Length (m): "}
+        }]
+        
+        for n in range(Nframes):
+          fig.layout["xaxis"+str(n*2+1)] = {
+              "range": [-uvmax,uvmax],
+              "domain": [0,0.5]
+          }
+          fig.layout["yaxis"+str(n*2+1)] = {
+              "range": [-uvmax,uvmax],
+              "domain": [0,1]
+          }
+        
+        fig.data[0].visible = True
+        fig.data[1].visible = True
+        
+        return fig
+        
 
 
