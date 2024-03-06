@@ -5,7 +5,8 @@ class FileUploader:
     def __init__(self):
         self.uploader = self.widgets.FileUpload(
             accept='',
-            multiple=False
+            multiple=False,
+            description='Select File'
         )
         display(self.uploader)
     

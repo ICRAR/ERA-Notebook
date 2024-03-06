@@ -73,8 +73,8 @@ class DataFile:
         self.freq_center = self.freq[int(self.Nfreq/2)]                  # Center freq to use after averaging
         self.Ntimes = len(np.unique(hdu[0].data[:]['DATE']))             # Number of unique timesteps in the data
         self.Nblts  = len(hdu[0].data)                                   # Total number of baselines for all timesteps
-        if self.Nblts / self.Nbls != self.Ntimes:
-            print("Beware: Not all baselines exist for every timestep")
+        #if self.Nblts / self.Nbls != self.Ntimes:
+        #    print("Warning: Not all baselines exist for every timestep")
         
         self.OBSRA   = CRVAL("RA")                                       # Phase Center (Right Ascension)
         self.OBSDEC  = CRVAL("DEC")                                      # Phase Center (Declination)
