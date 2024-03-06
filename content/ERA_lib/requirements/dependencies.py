@@ -1,5 +1,14 @@
 import piplite
 
 async def install():
-    await piplite.install("https://files.pythonhosted.org/packages/99/bc/82a8c3985209ca7c0a61b383c80e015fd92e74f8ba0ec1af98f9d6ca8dce/widgetsnbextension-4.0.10-py3-none-any.whl")
-    await piplite.install(["nbformat","ipywidgets","numpy","matplotlib","pandas","plotly","astropy"])
+
+    await piplite.install([
+        "widgetsnbextension==4.0.10",
+        "nbformat==5.9.2",
+        "ipywidgets==8.1.2",
+        "numpy==1.26.4",
+        "matplotlib==3.8.3",
+        "pandas==2.2.1",
+        "plotly==5.19.0",
+        "astropy==6.0.0"
+    ])
