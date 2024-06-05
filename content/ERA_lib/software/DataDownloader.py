@@ -27,7 +27,7 @@ class DataDownloader:
             value=self.datetime.time(12, 0),
             disabled=False,
             min=self.datetime.time(8, 0),
-            max=self.datetime.time(17, 0)
+            max=self.datetime.time(15, 55)
         )
 
         self.calPicker01 = self.widgets.Checkbox(
